@@ -61,6 +61,92 @@ def load_model_config():
             "repetition_penalty": 1.1,
         }
 
+def get_diary_file_path():
+    """
+    Returns the appropriate diary file path with YYMMDD date prefix based on config.
+    Creates a new file for each day.
+    """
+    # Load config to get current date
+    config = load_config()
+    diary_config = config.get("diary_manager", {})
+    
+    # Get current date from config (fallback to today if not found)
+    date_str = diary_config.get("current_date", datetime.now().strftime("%y%m%d"))
+    
+    # Get file format from config
+    file_format = diary_config.get("entries_file_format", "{date}_ongoing_entries.txt")
+    diary_filename = file_format.replace("{date}", date_str)
+    
+    # Get legacy filename from config
+    legacy_file = diary_config.get("legacy_file", "ongoing_entries.txt")
+    
+    # Get full path to the file
+    diary_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), diary_filename)
+    
+    # Check if file exists, if not, create it with a header
+    if not os.path.exists(diary_path):
+        try:
+            # Try to get current date in full format
+            if len(date_str) == 6:  # If it's in YYMMDD format
+                # Try to parse the date
+                try:
+                    year = int("20" + date_str[0:2])
+                    month = int(date_str[2:4])
+                    day = int(date_str[4:6])
+                    full_date = f"{year}-{month:02d}-{day:02d}"
+                except ValueError:
+                    # If parsing fails, use today's date
+                    full_date = datetime.now().strftime("%Y-%m-%d")
+            else:
+                # If not in expected format, use today's date
+                full_date = datetime.now().strftime("%Y-%m-%d")
+                
+            with open(diary_path, 'w', encoding='utf-8') as f:
+                f.write(f"# Diary Entries for {full_date}\n\n")
+            logging.info(f"Created new diary file: {diary_filename}")
+        except Exception as e:
+            logging.error(f"Error creating new diary file: {str(e)}")
+            # Fall back to the default ongoing_entries.txt if there's an error
+            return legacy_file
+    
+    return diary_path
+
+def get_previous_entries():
+    """Get previous entries from diary files based on config settings"""
+    # Load config
+    config = load_config()
+    diary_config = config.get("diary_manager", {})
+    
+    entries = ""
+    
+    # Get current date from config
+    date_str = diary_config.get("current_date", datetime.now().strftime("%y%m%d"))
+    
+    # Get file format and create current filename
+    file_format = diary_config.get("entries_file_format", "{date}_ongoing_entries.txt")
+    current_file = file_format.replace("{date}", date_str)
+    
+    # Get legacy filename
+    legacy_file = diary_config.get("legacy_file", "ongoing_entries.txt")
+    
+    # Check if current file exists and read it
+    if os.path.exists(current_file):
+        try:
+            with open(current_file, 'r', encoding='utf-8') as f:
+                entries = f.read()
+        except Exception as e:
+            logging.warning(f"Could not read current diary file: {str(e)}")
+    
+    # If no entries found, try the legacy file
+    if not entries and os.path.exists(legacy_file):
+        try:
+            with open(legacy_file, 'r', encoding='utf-8') as f:
+                entries = f.read()
+        except Exception as e:
+            logging.warning(f"Could not read legacy entries file: {str(e)}")
+    
+    return entries
+
 def get_diary_organization_prompt(diary_entry, ongoing_entries):
     """Import the prompt template from prompts.py"""
     try:
@@ -193,17 +279,10 @@ def initialize_llm():
         return None
 
 def process_with_llm(transcription):
-    """Process the transcription with Llama 3.1"""
-    # Read ongoing entries
-    ongoing_entries_path = "ongoing_entries.txt"
-    ongoing_entries = ""
-    
-    if os.path.exists(ongoing_entries_path):
-        try:
-            with open(ongoing_entries_path, 'r', encoding='utf-8') as f:
-                ongoing_entries = f.read()
-        except Exception as e:
-            logging.warning(f"Could not read ongoing entries file: {str(e)}")
+    """Process the transcription with the LLM"""
+    # Get the appropriate dated diary file path from config
+    diary_path = get_diary_file_path()
+    ongoing_entries = get_previous_entries()
     
     # Initialize the LLM
     gen_pipeline = initialize_llm()
@@ -252,16 +331,14 @@ def process_with_llm(transcription):
         logging.warning("Could not extract organized entry. Using original transcription.")
         organized_entry = transcription
     
-    # Append the entry to the ongoing entries file
+    # Append the entry to the dated diary file
     try:
-        with open(ongoing_entries_path, 'a', encoding='utf-8') as file:
-            # Add a timestamp and separator if there's existing content
-            if ongoing_entries:
-                timestamp = datetime.now().strftime("%Y-%m-%d %H:%M")
-                file.write(f"\n\n--- New Entry: {timestamp} ---\n\n")
-            
+        with open(diary_path, 'a', encoding='utf-8') as file:
+            # Add a timestamp and separator
+            timestamp = datetime.now().strftime("%H:%M")
+            file.write(f"\n\n## Entry at {timestamp}\n\n")
             file.write(organized_entry)
-        logging.info(f"Entry appended to {ongoing_entries_path}")
+        logging.info(f"Entry appended to {diary_path}")
         return True
     except Exception as e:
         logging.error(f"Error appending entry: {str(e)}")

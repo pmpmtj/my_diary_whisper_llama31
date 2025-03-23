@@ -13,6 +13,7 @@ A complete audio diary system that:
 - **LLM-Powered Analysis**: Uses Llama 3.1 to organize transcriptions and extract to-do items
 - **Scheduled Operation**: Runs automatically at configurable intervals with next sync time display
 - **Flexible Configuration**: Easy to customize via config files
+- **Date-Based File Management**: Creates separate diary files for each day with YYMMDD date prefixes
 
 ## Quick Start
 
@@ -73,6 +74,25 @@ python local_whisper.py         # Transcribe audio files
 python process_transcription.py # Process with Llama 3.1
 ```
 
+### Managing Diary Files
+
+The system automatically creates date-prefixed diary files (e.g., `240323_ongoing_entries.txt`) for each day.
+
+To manually set the date (useful after system downtime):
+```
+python scheduler.py --set-date YYMMDD
+```
+
+For example, to set the date to March 23, 2024:
+```
+python scheduler.py --set-date 240323
+```
+
+If no date is specified, it will use today's date:
+```
+python scheduler.py --set-date
+```
+
 ## How It Works
 
 ### 1. Audio Download
@@ -97,7 +117,7 @@ The `process_transcription.py` script:
 - Reads the transcription file
 - Processes the content to organize and analyze it
 - Extracts to-do items and saves them to `to_do.txt`
-- Adds the organized entry to `ongoing_entries.txt`
+- Adds the organized entry to the appropriate date-prefixed diary file
 
 ### 4. Scheduling
 
@@ -106,6 +126,15 @@ The `scheduler.py` script:
 - Logs all operations for monitoring and debugging
 - Displays the next scheduled run time
 - Manages the sequence of operations
+- Handles day changes and creates new diary files as needed
+
+### 5. Date Management
+
+The system:
+- Tracks the current date in `config.json`
+- Creates a new date-prefixed file each day
+- Detects date changes even after system downtime
+- Provides a utility for manually setting dates when needed
 
 ## Configuration
 
@@ -119,6 +148,12 @@ The `scheduler.py` script:
   "model": {
     "folder": "path/to/whisper/model",
     "name": "my_model.pt"
+  },
+  "diary_manager": {
+    "current_date": "240323",
+    "entries_file_format": "{date}_ongoing_entries.txt",
+    "legacy_file": "ongoing_entries.txt",
+    "auto_update_date": true
   },
   "scheduler": {
     "interval_seconds": 3600,
@@ -153,7 +188,7 @@ GENERATION_CONFIG = {
 ## Output Files
 
 - **transcription.txt**: Raw transcriptions from audio files
-- **ongoing_entries.txt**: Organized diary entries processed by Llama 3.1
+- **YYMMDD_ongoing_entries.txt**: Date-prefixed organized diary entries for each day
 - **to_do.txt**: Extracted to-do items and action points
 
 ## Troubleshooting
@@ -163,6 +198,7 @@ GENERATION_CONFIG = {
 - **Transcription Quality**: Adjust Whisper settings in `config.json` for better results
 - **LLM Performance**: Modify quantization settings in `config.py` based on your hardware
 - **FFmpeg Issues**: Make sure FFmpeg is installed and in your PATH, or place ffmpeg.exe in the project directory
+- **Date Management**: If the system was down for multiple days, use the `--set-date` utility to set the correct date
 
 ## System Requirements
 
